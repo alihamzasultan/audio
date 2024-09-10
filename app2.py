@@ -3,34 +3,68 @@ import speech_recognition as sr
 from pydub import AudioSegment
 from io import BytesIO
 
-st.title("Voice-to-Text with Recording")
+# Title of the app
+st.title("Voice-to-Text with Dynamic Recording")
 
-# Include the recording JavaScript
+# Frontend HTML & JavaScript for audio recording
 st.markdown("""
-<script src="record.js"></script>
-<button id="record-button">Start Recording</button>
-<button id="stop-button" disabled>Stop Recording</button>
-<audio id="audio-preview" controls></audio>
-<input type="hidden" id="audio-data" />
+    <h3>Record your audio</h3>
+    <button id="recordButton">Start Recording</button>
+    <button id="stopButton" disabled>Stop Recording</button>
+    <p><strong>Recording:</strong> <span id="recordingStatus">Not started</span></p>
+    <audio id="audioPlayback" controls></audio>
+    <br>
+
+    <script>
+        let chunks = [];
+        let recorder;
+        let audioBlob;
+
+        document.getElementById('recordButton').onclick = async function() {
+            chunks = [];
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            recorder = new MediaRecorder(stream);
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = e => {
+                audioBlob = new Blob(chunks, { 'type': 'audio/wav' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                document.getElementById('audioPlayback').src = audioUrl;
+                document.getElementById('audioData').value = audioUrl;
+            };
+            recorder.start();
+            document.getElementById('recordingStatus').innerText = 'Recording...';
+            document.getElementById('recordButton').disabled = true;
+            document.getElementById('stopButton').disabled = false;
+        }
+
+        document.getElementById('stopButton').onclick = function() {
+            recorder.stop();
+            document.getElementById('recordingStatus').innerText = 'Recording stopped';
+            document.getElementById('recordButton').disabled = false;
+            document.getElementById('stopButton').disabled = true;
+        }
+    </script>
 """, unsafe_allow_html=True)
 
-# Upload the recorded file
-audio_url = st.text_input("Audio URL", "")
+# Hidden field to get the audio data
+audio_url = st.text_input("Paste audio URL (after recording):")
+
+# Transcription part if an audio is available
 if audio_url:
-    # Convert the Blob URL to binary data
-    audio_blob = BytesIO(requests.get(audio_url).content)
+    st.write("Transcribing your audio...")
     
+    # Process the audio file from the URL
     recognizer = sr.Recognizer()
 
     try:
-        # Recognize the audio file
-        audio = AudioSegment.from_wav(audio_blob)
-        with sr.AudioFile(audio_blob) as source:
+        # Load audio from Blob URL and transcribe
+        audio = BytesIO(requests.get(audio_url).content)
+        with sr.AudioFile(audio) as source:
             audio_data = recognizer.record(source)
-            text = recognizer.recognize_google(audio_data)
+            transcription = recognizer.recognize_google(audio_data)
             st.write("Transcription:")
-            st.write(text)
+            st.write(transcription)
     except sr.UnknownValueError:
-        st.write("Google Speech Recognition could not understand the audio.")
+        st.write("Sorry, we couldn't understand the audio.")
     except sr.RequestError as e:
         st.write(f"Could not request results from Google Speech Recognition service; {e}")
